@@ -22,7 +22,7 @@ st.set_page_config(
 # =========================
 @st.cache_data
 def load_data():
-    df = pd.read_csv("all_df_1.csv")
+    df = pd.read_csv("all_df.csv")
 
     df["order_purchase_timestamp"] = pd.to_datetime(df["order_purchase_timestamp"])
     df["order_delivered_customer_date"] = pd.to_datetime(df["order_delivered_customer_date"])
@@ -42,29 +42,53 @@ all_df = load_data()
 # =========================
 # SIDEBAR FILTER (SYNC DENGAN DATA)
 # =========================
+def reset_filter():
+    st.session_state.start_date = min_date
+    st.session_state.end_date = max_date
+
+
 with st.sidebar:
     st.title("Filter Waktu")
 
     min_date = all_df["order_purchase_timestamp"].min().date()
     max_date = all_df["order_purchase_timestamp"].max().date()
 
-    start_date, end_date = st.date_input(
-        "Rentang Tanggal",
+    # inisialisasi session_state (hanya SEKALI, sebelum widget)
+    if "start_date" not in st.session_state:
+        st.session_state.start_date = min_date
+    if "end_date" not in st.session_state:
+        st.session_state.end_date = max_date
+
+    st.date_input(
+        "Tanggal Mulai",
         min_value=min_date,
         max_value=max_date,
-        value=(min_date, max_date)
+        key="start_date"
     )
 
+    st.date_input(
+        "Tanggal Akhir",
+        min_value=min_date,
+        max_value=max_date,
+        key="end_date"
+    )
+
+    # 🔁 RESET BUTTON (PAKAI CALLBACK)
+    st.button("Reset Filter", on_click=reset_filter)
+
     st.caption(f"Data tersedia dari {min_date} sampai {max_date}")
+
+if st.session_state.start_date > st.session_state.end_date:
+    st.error("❌ Tanggal Mulai tidak boleh lebih besar dari Tanggal Akhir.")
+    st.stop()
 
 # =========================
 # FILTER DATA
 # =========================
 main_df = all_df[
-    (all_df["order_purchase_timestamp"] >= pd.to_datetime(start_date)) &
-    (all_df["order_purchase_timestamp"] <= pd.to_datetime(end_date))
+    (all_df["order_purchase_timestamp"] >= pd.to_datetime(st.session_state.start_date)) &
+    (all_df["order_purchase_timestamp"] <= pd.to_datetime(st.session_state.end_date))
 ]
-
 # =========================
 # KPI & BASIC METRICS
 # =========================
@@ -217,7 +241,7 @@ with col1:
     st.markdown("##### ⭐ Distribusi Review Score (1–5)") 
     
     review_counts = (
-        all_df["review_score"]
+        main_df["review_score"]
         .value_counts()
         .sort_index()
     )
@@ -265,7 +289,7 @@ _, center_col, _ = st.columns([1, 3, 1])
 
 with center_col:
     top_category = (
-        all_df["product_category_name"]
+        main_df["product_category_name"]
         .value_counts()
         .head(10)
         .index
@@ -381,13 +405,10 @@ with col2:
 # =========================
 # PAYMENT SUMMARY
 # =========================
-# =========================
-# PAYMENT SUMMARY
-# =========================
 st.markdown("#### 💳 Perbandingan Metode Pembayaran")
 
 payment_summary = (
-    all_df
+    main_df
     .groupby("payment_type")
     .agg(
         avg_transaction_value=("payment_value", "mean"),
@@ -611,6 +632,5 @@ with col3:
     ax.tick_params(axis="y", labelsize=6)
     ax.set_xlabel("")
     ax.set_ylabel("")
-
 
     st.pyplot(fig)
